@@ -31,7 +31,10 @@
     <div class="card">
         <h2>Live Preview</h2>
         <div class="video-wrapper" id="video-container">
-            <p style="color: var(--text-muted);">
+            <video id="webcam" autoplay playsinline style="display:none;"></video>
+            <canvas id="canvas" style="display:none;"></canvas>
+            <img id="processed-frame" class="video-feed" style="display:none; width: 100%;">
+            <p id="placeholder-text" style="color: var(--text-muted);">
                 <i class="fas fa-video-slash" style="display: block; font-size: 2rem; margin-bottom: 1rem; text-align: center;"></i>
                 Enter details and click start
             </p>
@@ -40,19 +43,81 @@
 </div>
 
 <script>
-document.getElementById('reg-form').addEventListener('submit', function(e) {
+let captureInterval;
+let sampleCount = 0;
+const video = document.getElementById('webcam');
+const canvas = document.getElementById('canvas');
+const processedFrame = document.getElementById('processed-frame');
+const placeholderText = document.getElementById('placeholder-text');
+
+document.getElementById('reg-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     const name = document.getElementById('name').value;
     const roll = document.getElementById('roll').value;
     
     document.getElementById('status').style.display = 'block';
     document.getElementById('reg-form').style.display = 'none';
+    placeholderText.style.display = 'none';
+    processedFrame.style.display = 'block';
     
-    const videoContainer = document.getElementById('video-container');
-    videoContainer.innerHTML = `<img src="/video_feed/registration?name=${name}&roll=${roll}" class="video-feed">`;
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        
+        // Wait for video to be ready before starting interval
+        video.onloadedmetadata = () => {
+            captureInterval = setInterval(() => {
+                if (sampleCount >= 50) {
+                    clearInterval(captureInterval);
+                    stopCapture();
+                    return;
+                }
+                
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+                if (canvas.width === 0) return;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                
+                fetch('/process_frame', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        image: imageData,
+                        mode: 'registration',
+                        name: name,
+                        roll: roll,
+                        count: sampleCount
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.image) {
+                        processedFrame.src = data.image;
+                    }
+                    if (data.count !== undefined) {
+                        sampleCount = data.count;
+                    }
+                })
+                .catch(err => console.error(err));
+                
+            }, 250); // 4 frames per second
+        };
+        
+    } catch (err) {
+        console.error("Error accessing webcam:", err);
+        alert("Could not access webcam. Please allow permissions.");
+    }
 });
 
 function stopCapture() {
+    if (captureInterval) clearInterval(captureInterval);
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+    }
     fetch('/release_camera', { method: 'POST' })
     .then(() => {
         window.location.reload();

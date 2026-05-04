@@ -4,6 +4,8 @@ import os
 import time
 import shutil
 import pandas as pd
+import base64
+import numpy as np
 from datetime import datetime
 from src.database_manager import DatabaseManager
 from src.dataset_generator import DatasetGenerator
@@ -18,83 +20,7 @@ ensure_dirs()
 db = DatabaseManager()
 face_cascade = get_face_cascade()
 
-class CameraManager:
-    def __init__(self):
-        self.video = None
-    
-    def get_video(self):
-        if self.video is None or not self.video.isOpened():
-            self.video = cv2.VideoCapture(0)
-        return self.video
-
-    def release_video(self):
-        if self.video is not None:
-            self.video.release()
-            self.video = None
-
-cam_manager = CameraManager()
-
-def gen_frames(mode="recognition", name=None, roll=None):
-    """Video streaming generator."""
-    video = cam_manager.get_video()
-    
-    # If mode is registration, we might want to track counts
-    count = 0
-    num_samples = 50
-    
-    if mode == "attendance":
-        manager = AttendanceManager()
-    
-    while True:
-        success, frame = video.read()
-        if not success:
-            break
-        
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-        
-        if mode == "registration" and name and roll:
-            user_dir = os.path.join(DATASET_DIR, f"{name}_{roll}")
-            os.makedirs(user_dir, exist_ok=True)
-            
-            for (x, y, w, h) in faces:
-                if count < num_samples:
-                    count += 1
-                    cv2.imwrite(os.path.join(user_dir, f"{count}.jpg"), gray[y:y+h, x:x+w])
-                    cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
-                    cv2.putText(frame, f"Captured: {count}/{num_samples}", (10, 30), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                else:
-                    cv2.putText(frame, "Registration Complete!", (10, 30), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                    # We should stop or signal completion
-            
-            if count >= num_samples:
-                db.add_student(roll, name)
-
-        elif mode == "attendance":
-            for (x, y, w, h) in faces:
-                user_id, confidence = manager.recognizer.predict(gray[y:y+h, x:x+w])
-                
-                if confidence < 75: # Lower is better for LBPH
-                    user_data = manager.label_map.get(user_id, {"name": "Unknown", "roll": "N/A"})
-                    n = user_data["name"]
-                    r = user_data["roll"]
-                    manager.log_attendance(n, r)
-                    label = f"{n} ({r})"
-                    color = (0, 255, 0)
-                else:
-                    label = "Unknown"
-                    color = (0, 0, 255)
-                
-                cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-                cv2.putText(frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-
-        # Encode frame
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+# Removed local CameraManager as camera will be captured via JS in the browser
 
 @app.route('/')
 def index():
@@ -146,12 +72,82 @@ def delete_student(roll):
         return jsonify({"success": True})
     return jsonify({"success": False, "message": "Student not found"})
 
-@app.route('/video_feed/<mode>')
-def video_feed(mode):
-    name = request.args.get('name')
-    roll = request.args.get('roll')
-    return Response(gen_frames(mode, name, roll),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/process_frame', methods=['POST'])
+def process_frame():
+    data = request.json
+    if not data or 'image' not in data:
+        return jsonify({'error': 'No image provided'}), 400
+        
+    image_data = data.get('image')
+    mode = data.get('mode', 'attendance')
+    
+    try:
+        header, encoded = image_data.split(',', 1)
+        nparr = np.frombuffer(base64.b64decode(encoded), np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        
+        response_data = {"status": "success"}
+
+        if mode == "registration":
+            name = data.get('name')
+            roll = data.get('roll')
+            count = data.get('count', 0)
+            num_samples = 50
+            
+            user_dir = os.path.join(DATASET_DIR, f"{name}_{roll}")
+            os.makedirs(user_dir, exist_ok=True)
+            
+            for (x, y, w, h) in faces:
+                if count < num_samples:
+                    count += 1
+                    cv2.imwrite(os.path.join(user_dir, f"{count}.jpg"), gray[y:y+h, x:x+w])
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+                    cv2.putText(frame, f"Captured: {count}/{num_samples}", (10, 30), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                else:
+                    cv2.putText(frame, "Registration Complete!", (10, 30), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            if count >= num_samples:
+                db.add_student(roll, name)
+                
+            response_data['count'] = count
+
+        elif mode == "attendance":
+            manager = AttendanceManager()
+            for (x, y, w, h) in faces:
+                try:
+                    user_id, confidence = manager.recognizer.predict(gray[y:y+h, x:x+w])
+                    
+                    if confidence < 75: # Lower is better for LBPH
+                        user_data = manager.label_map.get(user_id, {"name": "Unknown", "roll": "N/A"})
+                        n = user_data["name"]
+                        r = user_data["roll"]
+                        manager.log_attendance(n, r)
+                        label = f"{n} ({r})"
+                        color = (0, 255, 0)
+                    else:
+                        label = "Unknown"
+                        color = (0, 0, 255)
+                except Exception:
+                    label = "Unknown"
+                    color = (0, 0, 255)
+                
+                cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+                cv2.putText(frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+
+        # Encode frame back to base64
+        _, buffer = cv2.imencode('.jpg', frame)
+        processed_image = base64.b64encode(buffer).decode('utf-8')
+        response_data['image'] = f"data:image/jpeg;base64,{processed_image}"
+        
+        return jsonify(response_data)
+    except Exception as e:
+        print(f"Error processing frame: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/train', methods=['POST'])
 def train():
@@ -161,7 +157,6 @@ def train():
 
 @app.route('/release_camera', methods=['POST'])
 def release_camera():
-    cam_manager.release_video()
     return jsonify({"success": True})
 
 if __name__ == '__main__':

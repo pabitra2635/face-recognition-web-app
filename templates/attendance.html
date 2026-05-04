@@ -6,7 +6,10 @@
     <p style="color: var(--text-muted); margin-bottom: 2rem;">Recognized faces will be automatically logged to today's sheet.</p>
 
     <div class="video-wrapper">
-        <img src="{{ url_for('video_feed', mode='attendance') }}" class="video-feed" style="display: block;">
+        <video id="webcam" autoplay playsinline style="display:none;"></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+        <img id="processed-frame" class="video-feed" style="display: none; width: 100%;">
+        <p id="loading-text" style="padding: 2rem;">Starting camera...</p>
     </div>
 
     <div style="margin-top: 2rem; display: flex; justify-content: center; gap: 1rem;">
@@ -20,11 +23,64 @@
 </div>
 
 <script>
+let captureInterval;
+const video = document.getElementById('webcam');
+const canvas = document.getElementById('canvas');
+const processedFrame = document.getElementById('processed-frame');
+const loadingText = document.getElementById('loading-text');
+
+async function startCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        
+        video.onloadedmetadata = () => {
+            loadingText.style.display = 'none';
+            processedFrame.style.display = 'block';
+            
+            captureInterval = setInterval(() => {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+                if (canvas.width === 0) return;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                
+                fetch('/process_frame', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        image: imageData,
+                        mode: 'attendance'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.image) {
+                        processedFrame.src = data.image;
+                    }
+                })
+                .catch(err => console.error(err));
+                
+            }, 300); // 3 frames per second
+        };
+        
+    } catch (err) {
+        console.error("Error accessing webcam:", err);
+        loadingText.innerText = "Could not access webcam. Please allow permissions.";
+    }
+}
+
+window.onload = startCamera;
+
 function stopAttendance() {
-    fetch('/release_camera', { method: 'POST' })
-    .then(() => {
-        window.location.href = '/';
-    });
+    if (captureInterval) clearInterval(captureInterval);
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+    }
+    window.location.href = '/';
 }
 </script>
 {% endblock %}
