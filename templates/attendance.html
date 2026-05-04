@@ -24,6 +24,7 @@
 
 <script>
 let captureInterval;
+let isProcessing = false;
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('canvas');
 const processedFrame = document.getElementById('processed-frame');
@@ -38,33 +39,42 @@ async function startCamera() {
             loadingText.style.display = 'none';
             processedFrame.style.display = 'block';
             
-            captureInterval = setInterval(() => {
+            captureInterval = setInterval(async () => {
+                if (isProcessing) return;
+                isProcessing = true;
+
                 canvas.width = video.videoWidth || 640;
                 canvas.height = video.videoHeight || 480;
-                if (canvas.width === 0) return;
+                if (canvas.width === 0) {
+                    isProcessing = false;
+                    return;
+                }
                 
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
                 const imageData = canvas.toDataURL('image/jpeg', 0.8);
                 
-                fetch('/process_frame', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        image: imageData,
-                        mode: 'attendance'
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
+                try {
+                    const response = await fetch('/process_frame', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            image: imageData,
+                            mode: 'attendance'
+                        })
+                    });
+                    const data = await response.json();
                     if (data.image) {
                         processedFrame.src = data.image;
                     }
-                })
-                .catch(err => console.error(err));
+                } catch (err) {
+                    console.error(err);
+                } finally {
+                    isProcessing = false;
+                }
                 
-            }, 300); // 3 frames per second
+            }, 300); // Evaluate every 300ms, but skips if processing
         };
         
     } catch (err) {

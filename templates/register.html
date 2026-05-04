@@ -45,6 +45,7 @@
 <script>
 let captureInterval;
 let sampleCount = 0;
+let isProcessing = false;
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('canvas');
 const processedFrame = document.getElementById('processed-frame');
@@ -66,45 +67,55 @@ document.getElementById('reg-form').addEventListener('submit', async function(e)
         
         // Wait for video to be ready before starting interval
         video.onloadedmetadata = () => {
-            captureInterval = setInterval(() => {
+            captureInterval = setInterval(async () => {
                 if (sampleCount >= 50) {
                     clearInterval(captureInterval);
+                    alert("Registration Complete!");
                     stopCapture();
                     return;
                 }
                 
+                if (isProcessing) return; // Prevent overlapping requests
+                isProcessing = true;
+                
                 canvas.width = video.videoWidth || 640;
                 canvas.height = video.videoHeight || 480;
-                if (canvas.width === 0) return;
+                if (canvas.width === 0) {
+                    isProcessing = false;
+                    return;
+                }
                 
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
                 const imageData = canvas.toDataURL('image/jpeg', 0.8);
                 
-                fetch('/process_frame', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        image: imageData,
-                        mode: 'registration',
-                        name: name,
-                        roll: roll,
-                        count: sampleCount
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
+                try {
+                    const response = await fetch('/process_frame', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            image: imageData,
+                            mode: 'registration',
+                            name: name,
+                            roll: roll,
+                            count: sampleCount
+                        })
+                    });
+                    const data = await response.json();
                     if (data.image) {
                         processedFrame.src = data.image;
                     }
                     if (data.count !== undefined) {
                         sampleCount = data.count;
                     }
-                })
-                .catch(err => console.error(err));
+                } catch (err) {
+                    console.error(err);
+                } finally {
+                    isProcessing = false;
+                }
                 
-            }, 250); // 4 frames per second
+            }, 250); // Evaluate every 250ms, but skips if processing
         };
         
     } catch (err) {
@@ -120,7 +131,7 @@ function stopCapture() {
     }
     fetch('/release_camera', { method: 'POST' })
     .then(() => {
-        window.location.reload();
+        window.location.href = '/';
     });
 }
 </script>
