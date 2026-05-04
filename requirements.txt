@@ -1,0 +1,6 @@
+opencv-contrib-python
+pandas
+tqdm
+Pillow
+openpyxl
+flask

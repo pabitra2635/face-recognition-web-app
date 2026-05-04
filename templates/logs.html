@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1>Attendance Logs</h1>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <label for="att-date" style="color: var(--text-muted);">Select Date:</label>
+            <input type="date" id="att-date" value="{{ date }}" onchange="changeDate(this.value)" style="width: auto;">
+            <button class="btn btn-primary" onclick="window.location.reload()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Summary -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <div class="card" style="margin-bottom: 0; padding: 1rem; background: rgba(99, 102, 241, 0.05);">
+            <p style="color: var(--text-muted); font-size: 0.8rem;">Total Students</p>
+            <h2 style="margin: 0.5rem 0;">{{ total }}</h2>
+        </div>
+        <div class="card" style="margin-bottom: 0; padding: 1rem; background: rgba(16, 185, 129, 0.05);">
+            <p style="color: var(--accent); font-size: 0.8rem;">Present</p>
+            <h2 style="margin: 0.5rem 0;">{{ present_count }}</h2>
+        </div>
+        <div class="card" style="margin-bottom: 0; padding: 1rem; background: rgba(239, 68, 68, 0.05);">
+            <p style="color: var(--danger); font-size: 0.8rem;">Absent</p>
+            <h2 style="margin: 0.5rem 0;">{{ total - present_count }}</h2>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem;">
+        <div>
+            <h2><i class="fas fa-check-circle" style="color: var(--accent);"></i> Present List</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Roll Number</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log['Name'] }}</td>
+                        <td>{{ log['Roll Number'] }}</td>
+                        <td>{{ log['Time'] }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not logs %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">No attendance for this date.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <div>
+            <h2><i class="fas fa-times-circle" style="color: var(--danger);"></i> Absent List</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Roll Number</th>
+                        <th>Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in absent %}
+                    <tr>
+                        <td>{{ student[0] }}</td>
+                        <td>{{ student[1] }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not absent and total > 0 and logs %}
+                    <tr>
+                        <td colspan="2" style="text-align: center; color: var(--accent); padding: 2rem;">Everyone was present!</td>
+                    </tr>
+                    {% elif not absent and total == 0 %}
+                    <tr>
+                        <td colspan="2" style="text-align: center; color: var(--text-muted); padding: 2rem;">No students in directory.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function changeDate(date) {
+    window.location.href = '/logs?date=' + date;
+}
+</script>
+{% endblock %}

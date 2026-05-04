@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card" style="text-align: center;">
+    <h1>Real-Time Attendance</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Recognized faces will be automatically logged to today's sheet.</p>
+
+    <div class="video-wrapper">
+        <img src="{{ url_for('video_feed', mode='attendance') }}" class="video-feed" style="display: block;">
+    </div>
+
+    <div style="margin-top: 2rem; display: flex; justify-content: center; gap: 1rem;">
+        <a href="/logs" class="btn btn-primary">
+            <i class="fas fa-list-alt"></i> View Today's Logs
+        </a>
+        <button class="btn" style="background: var(--danger); color: white;" onclick="stopAttendance()">
+            <i class="fas fa-stop"></i> Stop System
+        </button>
+    </div>
+</div>
+
+<script>
+function stopAttendance() {
+    fetch('/release_camera', { method: 'POST' })
+    .then(() => {
+        window.location.href = '/';
+    });
+}
+</script>
+{% endblock %}

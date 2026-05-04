@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card">
+    <h1>Welcome to FaceSync</h1>
+    <p style="color: var(--text-muted);">Real-time biometric attendance management system.</p>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-top: 2rem;">
+        <div class="card" style="margin-bottom: 0; padding: 1.5rem;">
+            <div style="color: var(--primary); font-size: 1.5rem; margin-bottom: 0.5rem;">
+                <i class="fas fa-users"></i>
+            </div>
+            <h3 style="font-size: 1.25rem;">{{ students|length }}</h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">Registered Students</p>
+        </div>
+        
+        <div class="card" style="margin-bottom: 0; padding: 1.5rem;">
+            <div style="color: var(--accent); font-size: 1.5rem; margin-bottom: 0.5rem;">
+                <i class="fas fa-brain"></i>
+            </div>
+            <h3 style="font-size: 1rem;">Ready to Train</h3>
+            <button class="btn btn-primary" onclick="trainModel()" id="train-btn" style="margin-top: 0.5rem; width: 100%;">
+                <i class="fas fa-sync"></i> Train Model
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Student Directory</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Roll Number</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for student in students %}
+            <tr id="row-{{ student[0] }}">
+                <td>{{ student[0] }}</td>
+                <td>{{ student[1] }}</td>
+                <td><span style="color: var(--accent);">Active</span></td>
+                <td>
+                    <button class="btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 0.4rem 0.8rem; font-size: 0.875rem;" onclick="deleteStudent('{{ student[0] }}')">
+                        <i class="fas fa-trash-alt"></i> Delete
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not students %}
+            <tr>
+                <td colspan="4" style="text-align: center; color: var(--text-muted);">No students registered yet.</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function deleteStudent(roll) {
+    if (confirm('Are you sure you want to delete student ' + roll + '? This will also remove their training data.')) {
+        fetch('/delete_student/' + roll, { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('row-' + roll).remove();
+                    alert('Student deleted successfully.');
+                    window.location.reload(); // Reload to update stats
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            });
+    }
+}
+function trainModel() {
+    const btn = document.getElementById('train-btn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Training...';
+    btn.disabled = true;
+
+    fetch('/train', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('Model trained successfully!');
+            } else {
+                alert('Training failed. Check logs.');
+            }
+        })
+        .catch(err => alert('Error: ' + err))
+        .finally(() => {
+            btn.innerHTML = '<i class="fas fa-sync"></i> Train Model';
+            btn.disabled = false;
+        });
+}
+</script>
+{% endblock %}

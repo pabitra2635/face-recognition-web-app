@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 2rem;">
+    <div class="card">
+        <h2>Register Student</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Enter details to start face capture.</p>
+        
+        <form id="reg-form">
+            <div class="form-group">
+                <label>Student Name</label>
+                <input type="text" id="name" required placeholder="e.g. John Doe">
+            </div>
+            <div class="form-group">
+                <label>Roll Number</label>
+                <input type="text" id="roll" required placeholder="e.g. CS101">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                <i class="fas fa-camera"></i> Start Capture
+            </button>
+        </form>
+
+        <div id="status" style="margin-top: 1.5rem; display: none;">
+            <p style="color: var(--accent);"><i class="fas fa-info-circle"></i> Capturing 50 samples...</p>
+            <button class="btn" style="background: var(--danger); color: white; width: 100%; margin-top: 1rem;" onclick="stopCapture()">
+                Stop
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Live Preview</h2>
+        <div class="video-wrapper" id="video-container">
+            <p style="color: var(--text-muted);">
+                <i class="fas fa-video-slash" style="display: block; font-size: 2rem; margin-bottom: 1rem; text-align: center;"></i>
+                Enter details and click start
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('reg-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const name = document.getElementById('name').value;
+    const roll = document.getElementById('roll').value;
+    
+    document.getElementById('status').style.display = 'block';
+    document.getElementById('reg-form').style.display = 'none';
+    
+    const videoContainer = document.getElementById('video-container');
+    videoContainer.innerHTML = `<img src="/video_feed/registration?name=${name}&roll=${roll}" class="video-feed">`;
+});
+
+function stopCapture() {
+    fetch('/release_camera', { method: 'POST' })
+    .then(() => {
+        window.location.reload();
+    });
+}
+</script>
+{% endblock %}
