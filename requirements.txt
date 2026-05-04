@@ -1,6 +1,8 @@
-opencv-contrib-python
+opencv-contrib-python-headless
 pandas
 tqdm
 Pillow
 openpyxl
 flask
+gunicorn
+numpy
